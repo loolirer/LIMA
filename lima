@@ -1,0 +1,175 @@
+#!/usr/bin/env bash
+# lima -- the jobs Incus can't do alone. For everything else, use the web UI.
+set -euo pipefail
+
+ROOT="$(dirname "$(readlink -f "$0")")"
+IMAGE=lima-workspace
+
+die() { echo "error: $*" >&2; exit 1; }
+
+cmd_image() {
+  local build=lima-image-build
+  exec </dev/null    # without a terminal, incus commands wait for YAML on stdin
+  incus delete --force "$build" 2>/dev/null || true
+  incus launch images:ubuntu/24.04/cloud "$build" -c security.nesting=true
+  incus exec "$build" -- cloud-init status --wait >/dev/null || true
+
+  incus exec "$build" -- bash -s <<'PROVISION'
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+
+apt-get update -qq
+apt-get upgrade -y -qq
+apt-get install -y -qq build-essential cmake git curl wget gnupg python3-pip python3-venv \
+  vim nano tmux htop rsync iproute2 openssh-server sudo locales \
+  docker.io docker-compose-v2 docker-buildx
+locale-gen en_US.UTF-8
+
+# All of Docker stays in /var/lib/docker, on its own volume. By default images go
+# elsewhere, and restoring a snapshot then leaves containers Docker can't remove.
+mkdir -p /etc/docker
+echo '{"features": {"containerd-snapshotter": false}}' > /etc/docker/daemon.json
+
+# GPU access inside Docker. Workspaces are unprivileged: no device cgroups.
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
+  | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
+  | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
+  > /etc/apt/sources.list.d/nvidia-container-toolkit.list
+apt-get update -qq
+apt-get install -y -qq nvidia-container-toolkit
+nvidia-ctk runtime configure --runtime=docker
+nvidia-ctk config --set nvidia-container-cli.no-cgroups --in-place
+
+# Desktop. Compositing is slow over VNC. xhost lets Docker containers open windows.
+apt-get install -y -qq --no-install-recommends xfce4 xfce4-terminal thunar mousepad \
+  dbus-x11 x11-xserver-utils xauth tigervnc-standalone-server fonts-dejavu
+sed -i 's/use_compositing=true/use_compositing=false/' /usr/share/xfwm4/defaults
+mkdir /etc/skel/.vnc
+cat > /etc/skel/.vnc/xstartup <<'XSTARTUP'
+#!/bin/sh
+unset SESSION_MANAGER DBUS_SESSION_BUS_ADDRESS
+xhost +local:
+exec dbus-launch --exit-with-session xfce4-session
+XSTARTUP
+chmod +x /etc/skel/.vnc/xstartup
+
+# VirtualGL runs 3D apps on the GPU.
+curl -fsSL --retry 3 -o /tmp/vgl.deb \
+  https://github.com/VirtualGL/virtualgl/releases/download/3.1.1/virtualgl_3.1.1_amd64.deb
+apt-get install -y -qq /tmp/vgl.deb
+rm /tmp/vgl.deb
+echo VGL_DISPLAY=egl0 >> /etc/environment
+
+# Each workspace creates its own user as uid and gid 1000.
+userdel -r ubuntu 2>/dev/null || true
+groupdel lxd 2>/dev/null || true
+
+# Power off when nobody is connected over SSH and no tmux session is open, checking
+# every 30 seconds, except on the first boot, which is `lima add` setting the
+# workspace up. sshd drops dead connections, like a closed laptop, after 3 minutes.
+printf 'ClientAliveInterval 60\nClientAliveCountMax 3\n' > /etc/ssh/sshd_config.d/10-lima.conf
+cat > /etc/systemd/system/lima-idle.service <<'UNIT'
+[Unit]
+Description=Power off if nobody is connected
+ConditionFirstBoot=no
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c "ss -Htn state established '( sport = :22 )' | grep -q . || pgrep tmux >/dev/null || systemctl poweroff"
+UNIT
+cat > /etc/systemd/system/lima-idle.timer <<'UNIT'
+[Unit]
+Description=Check whether anyone is connected
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=30s
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target
+UNIT
+systemctl enable lima-idle.timer
+
+# The login banner is `lima` itself.
+mkdir -p /etc/update-motd.d
+chmod -x /etc/update-motd.d/* 2>/dev/null || true
+ln -s /usr/local/bin/lima /etc/update-motd.d/99-lima
+
+apt-get clean
+rm -rf /var/lib/apt/lists/*
+PROVISION
+
+  incus file push "$ROOT/workspace/lima" "$build/usr/local/bin/lima" --mode 0755
+  # Without this, clones think first boot already ran and skip creating the user.
+  incus exec "$build" -- cloud-init clean --logs --seed --machine-id
+  incus stop "$build"
+  incus publish "$build" --alias "$IMAGE" --reuse
+  incus delete "$build"
+}
+
+cmd_add() {
+  # Incus names can't have underscores, so they become hyphens in the workspace's name.
+  local user="$1" name="${1//_/-}" key="$ROOT/keys/$1.pub" auth=~lima/.ssh/authorized_keys pubkey
+  local ct="$name-ws"
+  [[ "$user" =~ ^[a-z][a-z0-9_-]{0,31}$ ]] || die "'$user' is not a valid Linux username"
+  pubkey="$(head -1 "$key" 2>/dev/null | tr -d '\r' || true)"
+  [[ "$pubkey" =~ ^(ssh-|ecdsa-|sk-) ]] || die "put $user's SSH public key in $key"
+  [[ -w "$auth" ]] || die "can't write $auth: run with sudo, after the setup in docs/ADMIN.md"
+  exec </dev/null
+
+  # Docker's data gets its own volume, so snapshots don't copy it.
+  incus storage volume create default "docker-$name"
+  incus init "$IMAGE" "$ct" --profile default --profile lima-ws -c cloud-init.user-data="#cloud-config
+ssh_pwauth: false
+users:
+  - name: $user
+    uid: 1000
+    shell: /bin/bash
+    groups: [sudo, docker]
+    lock_passwd: true
+    sudo: \"ALL=(ALL) NOPASSWD:ALL\"
+    ssh_authorized_keys:
+      - \"$pubkey\""
+  incus config device add "$ct" docker disk pool=default source="docker-$name" path=/var/lib/docker
+  incus start "$ct"
+  incus exec "$ct" -- timeout 180 cloud-init status --wait >/dev/null \
+    || echo "warning: first boot had problems, is DHCP working? Details: incus exec $ct -- cloud-init status --long" >&2
+  incus exec "$ct" -- lima check || true
+
+  echo "restrict,command=\"/usr/local/bin/lima connect $user\" $pubkey" >> "$auth"
+  incus stop "$ct" || true
+  cat <<EOF
+
+Send this to $user, for ~/.ssh/config on their laptop:
+
+Host $ct
+    User                  $user
+    ProxyCommand          ssh -T -o StrictHostKeyChecking=accept-new lima@$(hostname)
+    StrictHostKeyChecking accept-new
+    LocalForward          5901 localhost:5901
+    LogLevel              FATAL
+
+EOF
+}
+
+# Forced command of the host's `lima` account: starts the workspace, then carries
+# its SSH. stdin and stdout are the SSH connection, so only nc may touch them.
+cmd_connect() {
+  local ct="${1//_/-}-ws" ip
+  for _ in $(seq 60); do
+    incus start "$ct" </dev/null >/dev/null 2>&1 || true
+    ip="$(incus list "$ct" --format csv -c 4 </dev/null | grep -o '[0-9.]* (eth0)' | cut -d' ' -f1 || true)"
+    if [[ -n "$ip" ]] && nc -z -w1 "$ip" 22 >/dev/null 2>&1; then exec nc "$ip" 22; fi
+    sleep 1
+  done
+  die "$ct did not start"
+}
+
+case "${1:-}" in
+  image)   cmd_image ;;
+  add)     cmd_add "${2:-}" ;;
+  connect) cmd_connect "${2:-}" ;;
+  *)       echo "usage: $0 image | add <user>" >&2; exit 1 ;;
+esac

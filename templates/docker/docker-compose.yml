@@ -1,0 +1,13 @@
+services:
+  dev:
+    build: .
+    gpus: all
+    network_mode: host    # reach robots without publishing ports
+    ipc: host
+    environment:
+      DISPLAY: ":1"       # the desktop from `lima desktop`
+      # ROS_DOMAIN_ID: "7"  # your own number, to keep your topics apart
+    volumes:
+      - ./ros2_ws:/home/ubuntu/ros2_ws
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - /srv/lima:/srv/lima

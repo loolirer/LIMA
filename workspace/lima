@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# lima -- your LIMA workspace. With no arguments, also the login banner.
+
+if [[ -t 1 ]]; then
+  G=$'\033[32m'; R=$'\033[31m'; B=$'\033[34m'; N=$'\033[0m'
+else
+  G=''; R=''; B=''; N=''
+fi
+
+ok()  { printf '  %sok%s %s\n' "$G" "$N" "$*"; }
+bad() { printf '  %sX%s  %s\n' "$R" "$N" "$*"; }
+
+desktop_running() { pgrep -f 'Xtigervnc :1' >/dev/null; }
+
+cmd_status() {
+  local gpu
+  gpu="$(nvidia-smi -i 0 --query-gpu=name,memory.used,memory.total --format=csv,noheader 2>/dev/null)" || gpu=none
+  cat <<EOF
+
+  ${B}$(hostname)${N}: your LIMA workspace. Run ${B}lima help${N} for commands.
+
+    gpu      $gpu
+    cpu      $(nproc) cores, shared
+    memory   $(numfmt --to=iec 2>/dev/null </sys/fs/cgroup/memory.current || echo '?') used, shared
+    disk     $(df -h / | awk 'NR==2{print $4" free of "$2}')
+    desktop  $(desktop_running && echo on || echo off)
+
+  This machine turns off about a minute after you log out, ending everything
+  running here, unless a ${B}tmux${N} session is still open. Your files stay.
+
+EOF
+}
+
+cmd_desktop() {
+  if [[ "$1" == stop ]]; then
+    tigervncserver -kill :1 >/dev/null 2>&1
+    echo "Desktop stopped."
+    return
+  fi
+  # No VNC password: it only listens on localhost, so your SSH key protects it.
+  desktop_running || tigervncserver :1 -localhost yes -SecurityTypes None \
+    -geometry "${1:-1920x1080}" >/dev/null 2>&1 \
+    || { bad "the desktop failed to start, see ~/.vnc/*.log"; exit 1; }
+  echo "Desktop is on. With ssh connected, point a VNC client at localhost:5901."
+}
+
+cmd_check() {
+  local out
+  out="$(nvidia-smi -L 2>/dev/null | head -1)"
+  if [[ -n "$out" ]]; then ok "$out"; else bad "no GPU"; fi
+
+  out="$(/opt/VirtualGL/bin/eglinfo egl0 2>/dev/null | grep -m1 'OpenGL renderer' | cut -d: -f2- | xargs)"
+  if [[ -n "$out" && "$out" != *llvmpipe* ]]; then ok "3D: $out"; else bad "no hardware 3D: ${out:-no renderer}"; fi
+
+  out="$(docker info --format '{{.Driver}}' 2>/dev/null)"
+  if [[ -z "$out" ]]; then bad "Docker is not responding"
+  elif ! mountpoint -q /var/lib/docker; then bad "Docker's volume is not attached"
+  elif [[ "$out" != overlay* ]]; then bad "slow Docker storage: $out"
+  else ok "Docker storage: $out"; fi
+
+  if docker run --rm --gpus all ubuntu nvidia-smi -L >/dev/null 2>&1; then
+    ok "GPU inside Docker"
+  else
+    bad "no GPU inside Docker"
+  fi
+
+  echo "Send anything marked X to the admin."
+}
+
+cmd_help() {
+  cat <<EOF
+
+  lima                 status
+  lima desktop [WxH]   start the desktop (default 1920x1080)
+  lima desktop stop    stop it
+  lima check           test the GPU, 3D and Docker
+
+EOF
+}
+
+case "${1:-}" in
+  "")      cmd_status ;;
+  desktop) cmd_desktop "${2:-}" ;;
+  check)   cmd_check ;;
+  *)       cmd_help ;;
+esac

@@ -1,0 +1,42 @@
+# Incus setup: incus admin init --preseed < preseed.yaml
+
+config:
+  # Web UI and API. Localhost only: reach it through an SSH tunnel.
+  core.https_address: 127.0.0.1:8443
+
+storage_pools:
+  - name: default
+    driver: dir
+    # config: {source: /mnt/data/incus}    # to use a directory on another disk
+
+profiles:
+  - name: default
+    devices:
+      eth0: {name: eth0, nictype: bridged, parent: br0, type: nic}
+      root: {path: /, pool: default, type: disk}
+
+  - name: lima-ws
+    description: LIMA workspace
+    config:
+      # Runs Docker inside. Never use security.privileged instead.
+      security.nesting: "true"
+      # Own host uids per workspace: nobody can touch others' files in /srv/lima.
+      security.idmap.isolated: "true"
+
+      # Injects the host's GPU driver. 'graphics' and 'display' enable OpenGL.
+      nvidia.runtime: "true"
+      nvidia.driver.capabilities: compute,utility,graphics,display,video
+
+      # Memory and CPU are shared, with no cap. limits.memory is only for a hard cap:
+      # with enforce: soft, a workspace that passes it freezes.
+
+      # Off until someone logs in, so snapshot stopped workspaces too.
+      boot.autostart: "false"
+      # A running workspace freezes during the copy, so do it at night, server time.
+      snapshots.schedule: "0 4 * * *"
+      snapshots.schedule.stopped: "true"
+      snapshots.expiry: 2w
+    devices:
+      # The default mode, 0660 root, shuts out normal users.
+      gpu: {type: gpu, mode: "0666"}
+      shared: {type: disk, source: /srv/lima, path: /srv/lima}
