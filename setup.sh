@@ -70,7 +70,9 @@ apt-get install -y -qq avahi-daemon
 # Shared data
 mkdir -p /srv/lima/{datasets,bags,models}
 chmod 1777 /srv/lima/{datasets,bags,models}
+rm -rf /srv/lima/templates    # a fresh copy, so moved or deleted templates don't linger
 cp -r templates /srv/lima/
+touch /srv/lima/templates/docker/ros2/.bash_history    # git ignores it, but compose mounts it
 
 # Incus settings and the workspace image
 incus admin init --preseed < preseed.yaml

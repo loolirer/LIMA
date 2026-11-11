@@ -54,8 +54,21 @@ lima desktop stop # When you're done, because it holds memory
 With `ssh` connected, point a VNC client (Remmina, TigerVNC or RealVNC) at
 `localhost:5901`.
 
-Start 3D apps with `vglrun` so they use the GPU, like `vglrun rviz2` or
-`vglrun gz sim` in the ROS container below.
+Start 3D apps with `vglrun` so they use the GPU, like `vglrun rviz2`.
+
+## ROS 2
+
+The lab's ROS 2 template is a `docker/` folder for your project's repo:
+
+```bash
+cp -r /srv/lima/templates/docker/ros2 ~/my_project/docker
+cd ~/my_project/docker
+docker compose up -d --build
+docker exec -it dev bash
+```
+
+Inside, your repo is in `/root/ros2_ws/src`. Add `docker/.bash_history` to your
+project's `.gitignore`.
 
 ## Files
 

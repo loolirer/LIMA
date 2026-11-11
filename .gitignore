@@ -6,3 +6,6 @@ id_*
 
 # VPN profiles
 *.ovpn
+
+# Shell history from the ROS 2 container
+.bash_history

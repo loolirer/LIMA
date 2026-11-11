@@ -1,0 +1,29 @@
+services:
+  dev:
+    container_name: dev
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    gpus: all
+    tty: true
+    restart: unless-stopped
+    cap_add:
+      - SYS_NICE
+    network_mode: host
+    ipc: host
+    pid: host
+    environment:
+     - DISPLAY=${DISPLAY:-:1}
+     - QT_X11_NO_MITSHM=1
+     # - ROS_DOMAIN_ID=0
+     # - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+    volumes:
+      - ./.bash_history:/root/.bash_history
+      - /dev:/dev
+      - /dev/shm:/dev/shm
+      - /run/udev:/run/udev
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ..:/root/ros2_ws/src
+      - /srv/lima:/srv/lima
+    privileged: true
+    command: bash -c "source /opt/ros/jazzy/setup.bash && bash"
