@@ -18,45 +18,54 @@ On a fresh Ubuntu Server 24.04, from a checkout of this repo. Check the storage 
 in `preseed.yaml` first. The network restarts midway, so use the console or `tmux`.
 
 ```bash
-sudo ./setup.sh    # about 10 minutes
+sudo ./setup.sh
 sudo reboot
 ```
 
+> `sudo ./setup.sh` takes a while.
+
 It installs the NVIDIA driver, the NVIDIA container tools and Incus with its web
 UI. It puts the network interface on a bridge, `br0`, so workspaces get their own
-lab addresses, and installs avahi, so the server answers to `lima-elfes.local`. It
-copies the templates to `/srv/lima`. It applies `preseed.yaml`,
-builds the workspace image and creates the `lima` login account. Run it again after
-changing `lima` or the templates.
+lab addresses, and installs avahi, so the server answers to `lima-elfes.local`. 
 
-After the reboot, `nvidia-smi` must work. Reserve the server's address on the lab
-router, since users log in through it.
+It copies the templates to `/srv/lima`. It applies `preseed.yaml`,
+builds the workspace image and creates the `lima` login account. Your shells then
+start in the repo. Run it again after changing `lima` or the templates.
+
+After the reboot, `nvidia-smi` must work. 
+
+> Reserve the server's address and the VM addresses on the lab router for consistency.
 
 ## Web UI
 
+Create a tunnel on your machine and leave it open while you access the Web UI:
+
 ```bash
-ssh -L 8443:localhost:8443 <you>@lima-elfes
+ssh -L 8443:localhost:8443 lima@lima-elfes.local
 ```
 
-Open https://localhost:8443 and accept the self-signed certificate warning. The
-UI asks for a trust token, once per browser. Get one on the server with
-`incus config trust add <name>`.
+> If `lima-elfes.local` doesn't resolve, put the server's IP in that command instead.
 
-Use it for graphs, consoles, snapshots and logs.
+Open https://localhost:8443 and accept the self-signed certificate warning. For a first 
+use in your browser, follow the instructions on the incus UI.
+
+You may use this for graphs, consoles, snapshots and logs.
 
 ## People
 
 **Add.** `user` is any valid Linux username. In workspace names, underscores become
-hyphens. The user must send you their public key, and you should place it in this repo's `keys/` folder, then commit it.
+hyphens. The user must send you their ssh public key, and you should place it in this repo's 
+`keys/` folder, then commit it.
+
+> Read "Connect" on `USER.md` to learn how to generate the public key.
 
 ```bash
 mkdir -p keys
-cp their-key.pub keys/user.pub
-sudo ./lima add user    # runs lima check, turns it off, prints the SSH block to send them
+cp id_ed25519_lima.pub keys/user.pub
+sudo ./lima add user
 ```
 
-If `lima-elfes` doesn't resolve on their laptop, use `lima-elfes.local` or the
-server's IP in that block.
+> The "user" username must match in both `keys/user.pub` and the chosen username on `./lima add`.
 
 **Check or repair.** Without a login, it turns itself off again after 30 seconds,
 unless you stop its timer. It comes back on the next start.
@@ -85,6 +94,18 @@ incus storage volume delete default docker-user
 sudo sed -i '/lima connect user"/d' ~lima/.ssh/authorized_keys
 ```
 
+## Uninstall
+
+```bash
+sudo ./uninstall.sh
+```
+
+It deletes every workspace, with its snapshots and Docker data, so export any you
+want to keep first. It removes Incus, the `lima` login account and the bridge, and
+keeps the NVIDIA driver, avahi and the data in `/srv/lima`. If `lima` is also your
+own account, it keeps the account and only removes the workspace logins. The network
+restarts at the end, so use the console or `tmux`.
+
 ## Resources
 
 RAM and CPU are shared, with no cap: anyone can use whatever is free, and 8 GiB is
@@ -93,13 +114,12 @@ processes, usually the largest, whoever owns them, and host services aren't exem
 A busy CPU just slows everyone down. Disk has no quotas, and nothing manages GPU
 memory.
 
-Never set `limits.memory.enforce=soft`: despite its description, a workspace that
-passes the limit freezes.
+> Never set `limits.memory.enforce=soft`: despite its description, a workspace that passes the limit freezes.
 
 ```bash
-incus config set user-ws limits.memory=16GiB            # hard cap: past it, processes get killed
-incus config set user-ws limits.cpu=8                   # restrict to 8 CPUs
-incus list -c ns4m                                      # addresses and memory use
+incus config set user-ws limits.memory=16GiB
+incus config set user-ws limits.cpu=8
+incus list -c ns4m
 ```
 
 ## Troubleshooting
@@ -110,7 +130,8 @@ incus list -c ns4m                                      # addresses and memory u
 - **`lima check` says slow Docker storage:** the storage pool's filesystem doesn't support overlay. Use ext4 or XFS.
 - **No GPU in a workspace after a driver upgrade:** restart the workspace, then reboot the host if that fails.
 - **User wasn't created:** `incus exec user-ws -- cloud-init status --long`.
-- **Can't SSH:** `Permission denied` means the wrong key, so compare `keys/user.pub` with `~lima/.ssh/authorized_keys`. For anything else, try `incus start user-ws` and read the error.
+- **`ssh user-ws` prints `SSH-2.0-OpenSSH…: command not found`:** their key also opens a plain shell on the `lima` account, as happens when it's your admin key and you log in to the server as `lima`. Give the workspace a different key: remove it and add it again.
+- **Can't SSH:** `Permission denied` means the wrong key, so compare `keys/user.pub` with `~lima/.ssh/authorized_keys`. For anything else, try `incus start user-ws` and read the error. 
 
 ## Security and backups
 

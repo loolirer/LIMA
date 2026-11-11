@@ -5,14 +5,25 @@ Docker. Nobody else can see it, so install whatever you want.
 
 ## Connect
 
-Send the admin your public key, from `cat ~/.ssh/id_ed25519.pub` (create one with
-`ssh-keygen -t ed25519` if needed). They'll send you a block for `~/.ssh/config` on
-your laptop:
+Create a key just for LIMA, then send the admin the line the second command prints:
+
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_lima
+```
+
+The admin sends back a command that adds your machine to `~/.ssh/config`. Paste all
+of it into a terminal on your laptop. It looks like this:
+
+```bash
+mkdir -p ~/.ssh && chmod 600 ~/.ssh/config
+```
 
 ```
 Host user-ws
     User                  user
-    ProxyCommand          ssh -T -o StrictHostKeyChecking=accept-new lima@lima-elfes
+    IdentityFile          ~/.ssh/id_ed25519_lima
+    IdentitiesOnly        yes
+    ProxyCommand          ssh -T -i ~/.ssh/id_ed25519_lima -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new lima@lima-elfes.local
     StrictHostKeyChecking accept-new
     LocalForward          5901 localhost:5901
     LogLevel              FATAL
@@ -33,9 +44,11 @@ while a `tmux` session is open. Run `tmux`, start the job, then detach with
 
 ## Desktop
 
+Ubuntu's standard GNOME desktop, over VNC:
+
 ```bash
-lima desktop              # or: lima desktop 2560x1440
-lima desktop stop         # when you're done, because it holds memory
+lima desktop
+lima desktop stop # When you're done, because it holds memory
 ```
 
 With `ssh` connected, point a VNC client (Remmina, TigerVNC or RealVNC) at
@@ -43,30 +56,6 @@ With `ssh` connected, point a VNC client (Remmina, TigerVNC or RealVNC) at
 
 Start 3D apps with `vglrun` so they use the GPU, like `vglrun rviz2` or
 `vglrun gz sim` in the ROS container below.
-
-## ROS 2
-
-ROS runs in a container you build from the lab's template:
-
-```bash
-cp -r /srv/lima/templates/docker ~/ros2
-cd ~/ros2
-mkdir -p ros2_ws/src
-docker compose run --build --rm dev    # a few minutes the first time
-```
-
-This opens a shell with ROS ready, where you run `colcon build --symlink-install`.
-Your source is in `~/ros2/ros2_ws`, so you can edit it from outside the container.
-GUI apps appear on your desktop, so start that first.
-
-Your topics mix with everyone else's on the lab network, robots included. To keep
-them apart, pick a number from 1 to 101 and set `ROS_DOMAIN_ID` in
-`docker-compose.yml`. Your robot needs the same number.
-
-To change the setup, edit `Dockerfile` (the ROS version is in `FROM`) and run the
-same command again.
-
-For your own containers, add `--gpus all` to use the GPU.
 
 ## Files
 
@@ -98,6 +87,9 @@ the copy and then carries on, so keep big data in `/srv/lima`.
 
 - **Can't SSH:** check you're on the lab network or VPN. `Permission denied` means
   the admin has the wrong key. For anything else, ask the admin.
+- **`Could not resolve hostname lima-elfes.local`:** you're probably not on the lab
+  network itself, for example on the VPN. In `~/.ssh/config`, replace
+  `lima-elfes.local` with the server's IP.
 - **`ssh` exits without a word right after a logout:** your machine was shutting down.
   Run it again.
 - **A job or window is gone:** your machine turns off after you log out. Run long
