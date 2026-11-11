@@ -6,8 +6,10 @@ die() { echo "error: $*" >&2; exit 1; }
 [[ $EUID -eq 0 ]] || die "run it with sudo"
 export DEBIAN_FRONTEND=noninteractive
 
-# NVIDIA driver. Not --gpgpu: that one has no OpenGL, so no 3D.
 apt-get update -qq
+apt-get full-upgrade -y -qq
+
+# NVIDIA driver. Not --gpgpu: that one has no OpenGL, so no 3D.
 apt-get install -y -qq curl gnupg uidmap netcat-openbsd ubuntu-drivers-common
 ubuntu-drivers install
 
