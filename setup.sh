@@ -82,4 +82,8 @@ id lima >/dev/null 2>&1 || useradd -m -G incus-admin lima
 install -d -m 700 -o lima -g lima ~lima/.ssh
 [[ -f ~lima/.ssh/authorized_keys ]] || install -m 600 -o lima -g lima /dev/null ~lima/.ssh/authorized_keys
 
+# Your new shells start in this repo.
+[[ -z "${SUDO_USER:-}" ]] || sudo -H -u "$SUDO_USER" bash -c \
+  'grep -qxF "cd $1" ~/.bashrc 2>/dev/null || echo "cd $1" >> ~/.bashrc' _ "$(printf %q "$PWD")"
+
 echo "Done. Reboot to load the NVIDIA driver."
