@@ -24,7 +24,8 @@ sudo reboot
 
 It installs the NVIDIA driver, the NVIDIA container tools and Incus with its web
 UI. It puts the network interface on a bridge, `br0`, so workspaces get their own
-lab addresses, and copies the templates to `/srv/lima`. It applies `preseed.yaml`,
+lab addresses, and installs avahi, so the server answers to `lima-elfes.local`. It
+copies the templates to `/srv/lima`. It applies `preseed.yaml`,
 builds the workspace image and creates the `lima` login account. Run it again after
 changing `lima` or the templates.
 
@@ -45,14 +46,17 @@ Use it for graphs, consoles, snapshots and logs.
 
 ## People
 
-**Add.** Save their public key as `keys/user.pub` and commit it, where `user` is any
-valid Linux username. In workspace names, underscores become hyphens.
+**Add.** `user` is any valid Linux username. In workspace names, underscores become
+hyphens. The user must send you their public key, and you should place it in this repo's `keys/` folder, then commit it.
 
 ```bash
+mkdir -p keys
+cp their-key.pub keys/user.pub
 sudo ./lima add user    # runs lima check, turns it off, prints the SSH block to send them
 ```
 
-If `lima-elfes` doesn't resolve on their laptop, use the server's IP in that block.
+If `lima-elfes` doesn't resolve on their laptop, use `lima-elfes.local` or the
+server's IP in that block.
 
 **Check or repair.** Without a login, it turns itself off again after 30 seconds,
 unless you stop its timer. It comes back on the next start.
