@@ -9,6 +9,7 @@ Gives each member of the LIMA robotics lab their own Ubuntu machine on
 | Path | What it is |
 |---|---|
 | `setup.sh` | Sets up the server: drivers, Incus, network bridge, image, login account |
+| `uninstall.sh` | Undoes `setup.sh`, deleting every workspace |
 | `preseed.yaml` | Incus setup: storage, network, workspace profile |
 | `lima` | Host script: `image`, `add <user>`, and `connect`, which starts a workspace at login |
 | `workspace/lima` | User command, installed in every workspace |
