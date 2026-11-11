@@ -60,8 +60,11 @@ hyphens. The user must send you their ssh public key, and you should place it in
 > Read "Connect" on `USER.md` to learn how to generate the public key.
 
 ```bash
-mkdir -p keys
-cp id_ed25519_lima.pub keys/user.pub
+# On your laptop
+ssh lima@lima-elfes.local mkdir -p LIMA/keys
+scp id_ed25519_lima.pub lima@lima-elfes.local:LIMA/keys/user.pub
+
+# On lima-elfes, in the repo
 sudo ./lima add user
 ```
 
@@ -88,7 +91,7 @@ incus snapshot restore user-ws snap3
 **Remove.** Their files in `/srv/lima` stay.
 
 ```bash
-incus export user-ws ~/user.tar.gz    # optional copy
+incus export user-ws ~/user.tar.gz # Optional copy
 incus delete --force user-ws
 incus storage volume delete default docker-user
 sudo sed -i '/lima connect user"/d' ~lima/.ssh/authorized_keys
