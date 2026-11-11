@@ -64,6 +64,9 @@ NETPLAN
     || die "br0 got no address: check /etc/netplan/50-cloud-init.yaml at the console"
 fi
 
+# Answers to <hostname>.local, so laptops on the lab network find the server by name.
+apt-get install -y -qq avahi-daemon
+
 # Shared data
 mkdir -p /srv/lima/{datasets,bags,models}
 chmod 1777 /srv/lima/{datasets,bags,models}
