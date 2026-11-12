@@ -69,6 +69,11 @@ curl -fsSL --retry 3 -o /tmp/vgl.deb \
 apt-get install -y -qq /tmp/vgl.deb
 rm /tmp/vgl.deb
 echo VGL_DISPLAY=egl0 >> /etc/environment
+# Incus brings in NVIDIA's EGL library but not the file that tells apps to load it,
+# so 3D falls back to software. Without a GPU, it does nothing.
+mkdir -p /usr/share/glvnd/egl_vendor.d
+echo '{"file_format_version": "1.0.0", "ICD": {"library_path": "libEGL_nvidia.so.0"}}' \
+  > /usr/share/glvnd/egl_vendor.d/10_nvidia.json
 
 # Each workspace creates its own user as uid and gid 1000.
 userdel -r ubuntu 2>/dev/null || true
