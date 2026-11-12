@@ -35,6 +35,7 @@ start in the repo. Run it again after changing `lima` or the templates.
 After the reboot, `nvidia-smi` must work. 
 
 > Reserve the server's address and the VM addresses on the lab router for consistency.
+> `lima add` gives users the server's current IP, from `br0`.
 
 ## Web UI
 

@@ -129,8 +129,11 @@ PROVISION
 cmd_add() {
   # Incus names can't have underscores, so they become hyphens in the workspace's name.
   local user="$1" name="${1//_/-}" key="$ROOT/keys/$1.pub" auth=~lima/.ssh/authorized_keys pubkey
-  local ct="$name-ws"
+  local ct="$name-ws" host_ip
   [[ "$user" =~ ^[a-z][a-z0-9_-]{0,31}$ ]] || die "'$user' is not a valid Linux username"
+  # Users connect by IP, as .local names don't cross VPNs.
+  host_ip="$(ip -4 -o addr show br0 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1)"
+  [[ -n "$host_ip" ]] || die "br0 has no IPv4 address"
   pubkey="$(head -1 "$key" 2>/dev/null | tr -d '\r' || true)"
   [[ "$pubkey" =~ ^(ssh-|ecdsa-|sk-) ]] || die "put $user's SSH public key in $key"
   [[ -w "$auth" ]] || die "can't write $auth: run with sudo, after the setup in docs/ADMIN.md"
@@ -167,7 +170,7 @@ Host $ct
     User                  $user
     IdentityFile          ~/.ssh/id_ed25519_lima
     IdentitiesOnly        yes
-    ProxyCommand          ssh -T -i ~/.ssh/id_ed25519_lima -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new lima@$(hostname).local
+    ProxyCommand          ssh -T -i ~/.ssh/id_ed25519_lima -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new lima@$host_ip
     StrictHostKeyChecking accept-new
     LocalForward          5901 localhost:5901
     LogLevel              FATAL

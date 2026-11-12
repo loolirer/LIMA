@@ -23,7 +23,7 @@ Host user-ws
     User                  user
     IdentityFile          ~/.ssh/id_ed25519_lima
     IdentitiesOnly        yes
-    ProxyCommand          ssh -T -i ~/.ssh/id_ed25519_lima -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new lima@lima-elfes.local
+    ProxyCommand          ssh -T -i ~/.ssh/id_ed25519_lima -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new lima@192.168.X.Y
     StrictHostKeyChecking accept-new
     LocalForward          5901 localhost:5901
     LogLevel              FATAL
@@ -100,9 +100,8 @@ the copy and then carries on, so keep big data in `/srv/lima`.
 
 - **Can't SSH:** check you're on the lab network or VPN. `Permission denied` means
   the admin has the wrong key. For anything else, ask the admin.
-- **`Could not resolve hostname lima-elfes.local`:** you're probably not on the lab
-  network itself, for example on the VPN. In `~/.ssh/config`, replace
-  `lima-elfes.local` with the server's IP.
+- **The server's IP changed:** in `~/.ssh/config`, put the new one in the
+  `ProxyCommand` line. Do not expect for it to happen often, but keep in mind.
 - **`Host key verification failed`:** the admin rebuilt your machine. Run
   `ssh-keygen -R user-ws`.
 - **`ssh` exits without a word right after a logout:** your machine was shutting down.
