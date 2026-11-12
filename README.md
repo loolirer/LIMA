@@ -13,6 +13,6 @@ Gives each member of the LIMA robotics lab their own Ubuntu machine on
 | `preseed.yaml` | Incus setup: storage, network, workspace profile |
 | `lima` | Host script: `image`, `add <user>`, and `connect`, which starts a workspace at login |
 | `workspace/lima` | User command, installed in every workspace |
-| `workspace/xfce4/` | The desktop's look: theme, fonts, panels |
+| `workspace/xfce4/` | The desktop's look: theme, fonts, panels, wallpaper |
 | `templates/docker/ros2/` | ROS 2 container template |
 | `keys/<user>.pub` | SSH public keys: the record of who has access |
