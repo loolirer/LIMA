@@ -103,6 +103,8 @@ the copy and then carries on, so keep big data in `/srv/lima`.
 - **`Could not resolve hostname lima-elfes.local`:** you're probably not on the lab
   network itself, for example on the VPN. In `~/.ssh/config`, replace
   `lima-elfes.local` with the server's IP.
+- **`Host key verification failed`:** the admin rebuilt your machine. Run
+  `ssh-keygen -R user-ws`.
 - **`ssh` exits without a word right after a logout:** your machine was shutting down.
   Run it again.
 - **A job or window is gone:** your machine turns off after you log out. Run long
