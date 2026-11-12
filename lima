@@ -41,48 +41,25 @@ apt-get install -y -qq nvidia-container-toolkit
 nvidia-ctk runtime configure --runtime=docker
 nvidia-ctk config --set nvidia-container-cli.no-cgroups --in-place
 
-# Desktop: Ubuntu's own, over VNC. Without its recommends it leaves out snaps, printing
-# and the like, so add back the terminal, the editor and the Ubuntu look.
-apt-get install -y -qq --no-install-recommends ubuntu-desktop-minimal \
-  gnome-terminal gnome-text-editor yaru-theme-gtk yaru-theme-icon yaru-theme-gnome-shell \
-  fonts-ubuntu dbus-x11 x11-xserver-utils xauth tigervnc-standalone-server
-# No login screen: the desktop starts with `lima desktop`.
-systemctl set-default multi-user.target
-# The desktop hands the network to NetworkManager, which it didn't install. This file
-# overrides its netplan file of the same name.
-printf 'network:\n  version: 2\n  renderer: networkd\n' > /etc/netplan/00-network-manager-all.yaml
-chmod 600 /etc/netplan/00-network-manager-all.yaml
-# Users have no password, so no lock screen, no suspend, and no password prompts:
-# they already have sudo without one. Animations are slow over VNC. ":ubuntu" makes
-# these beat Ubuntu's own defaults in its session.
-cat > /usr/share/glib-2.0/schemas/90-lima.gschema.override <<'GSETTINGS'
-[org.gnome.desktop.screensaver:ubuntu]
-lock-enabled=false
-[org.gnome.desktop.lockdown:ubuntu]
-disable-lock-screen=true
-[org.gnome.desktop.session:ubuntu]
-idle-delay=uint32 0
-[org.gnome.settings-daemon.plugins.power:ubuntu]
-sleep-inactive-ac-type='nothing'
-[org.gnome.desktop.interface:ubuntu]
-enable-animations=false
-[org.gnome.shell:ubuntu]
-favorite-apps=['org.gnome.Terminal.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.TextEditor.desktop']
-GSETTINGS
-glib-compile-schemas /usr/share/glib-2.0/schemas
+# Desktop: XFCE over VNC. Its look comes from workspace/xfce4, in /etc/xdg/lima, which
+# the session reads before XFCE's own defaults. xhost lets Docker containers open windows.
+apt-get install -y -qq --no-install-recommends xfce4 xfce4-terminal xfce4-whiskermenu-plugin \
+  thunar mousepad orchis-gtk-theme papirus-icon-theme fonts-inter fonts-ubuntu fonts-dejavu \
+  librsvg2-common dbus-x11 x11-xserver-utils xauth tigervnc-standalone-server
+# Users have no password, so no password prompts: they already have sudo without one.
+mkdir -p /etc/polkit-1/rules.d
 cat > /etc/polkit-1/rules.d/50-lima.rules <<'POLKIT'
 polkit.addRule(function(action, subject) {
   if (subject.isInGroup("sudo")) return polkit.Result.YES;
 });
 POLKIT
-# xhost lets Docker containers open windows.
 mkdir /etc/skel/.vnc
 cat > /etc/skel/.vnc/xstartup <<'XSTARTUP'
 #!/bin/sh
 unset SESSION_MANAGER DBUS_SESSION_BUS_ADDRESS
-export XDG_SESSION_TYPE=x11 XDG_CURRENT_DESKTOP=ubuntu:GNOME GNOME_SHELL_SESSION_MODE=ubuntu
+export XDG_CONFIG_DIRS=/etc/xdg/lima:/etc/xdg
 xhost +local:
-exec dbus-launch --exit-with-session gnome-session --session=ubuntu
+exec dbus-launch --exit-with-session xfce4-session
 XSTARTUP
 chmod +x /etc/skel/.vnc/xstartup
 
@@ -134,6 +111,9 @@ rm -rf /var/lib/apt/lists/*
 PROVISION
 
   incus file push "$ROOT/workspace/lima" "$build/usr/local/bin/lima" --mode 0755
+  incus exec "$build" -- mkdir -p /etc/xdg/lima
+  incus file push -r "$ROOT/workspace/xfce4" "$build/etc/xdg/lima/"
+  incus exec "$build" -- chmod -R u=rwX,go=rX /etc/xdg/lima
   # Without this, clones think first boot already ran and skip creating the user.
   incus exec "$build" -- cloud-init clean --logs --seed --machine-id
   incus stop "$build"

@@ -44,7 +44,7 @@ while a `tmux` session is open. Run `tmux`, start the job, then detach with
 
 ## Desktop
 
-Ubuntu's standard GNOME desktop, over VNC:
+An XFCE desktop, over VNC:
 
 ```bash
 lima desktop
